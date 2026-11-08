@@ -112,6 +112,20 @@ textarea{width:100%;box-sizing:border-box;min-height:160px;resize:vertical;backg
 .momenu{display:flex;flex-direction:column;gap:6px;align-items:stretch;padding:8px;border-radius:8px;background:rgba(13,17,21,.86);border:1px solid rgba(255,255,255,.12);width:190px;pointer-events:auto}
 .momenu .swapbox{width:auto!important}
 .momenu #gyroBox{display:flex}.momenu #gyroBtn{flex:1}
+.intro{position:fixed;inset:0;z-index:50;background:var(--bg);touch-action:none;transition:opacity .45s}
+.intro.out{opacity:0}
+.intro canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.introDots{position:absolute;left:0;right:0;bottom:calc(28px + env(safe-area-inset-bottom,0px));display:flex;justify-content:center;gap:8px;pointer-events:none}
+.introDots i{width:7px;height:7px;border-radius:50%;background:var(--line)}
+.introDots i.past{background:var(--muted)}.introDots i.on{background:var(--w)}
+#introSkip{position:absolute;top:calc(14px + env(safe-area-inset-top,0px));right:calc(14px + env(safe-area-inset-right,0px));background:transparent}
+.replay{padding:2px 9px;font-size:12px;color:var(--muted)}
+@keyframes glowp{0%,100%{box-shadow:0 0 0 1px rgba(201,140,233,.5)}50%{box-shadow:0 0 0 4px rgba(201,140,233,.85)}}
+.glow{border-color:var(--w)!important;animation:glowp 1.3s ease-in-out infinite}
+.tilthint{position:absolute;top:56px;left:50%;transform:translateX(-50%);pointer-events:none;padding:4px;border-radius:10px;background:rgba(13,17,21,.6)}
+@keyframes tiltp{0%,100%{transform:rotate(-24deg)}50%{transform:rotate(24deg)}}
+.tiltphone{transform-origin:20px 20px;animation:tiltp 1.6s ease-in-out infinite}
+@media (prefers-reduced-motion:reduce){.glow{animation:none;box-shadow:0 0 0 3px rgba(201,140,233,.8)}.tiltphone{animation:none;transform:rotate(20deg)}}
 .err{padding:24px;color:var(--x)}
 
 /* phones: controls float over the live view so you never scroll while playing */
@@ -159,9 +173,16 @@ textarea{width:100%;box-sizing:border-box;min-height:160px;resize:vertical;backg
 </style>
 
 <div class="app">
+  <div class="intro" id="intro" hidden>
+    <canvas id="introCv" aria-label="Animation: a line becomes a square, then a cube, then sweeps into a fourth direction"></canvas>
+    <div class="introDots" id="introDots"></div>
+    <button id="introSkip">Skip</button>
+  </div>
+
   <header>
     <h1>Your Other <span>Right!</span></h1>
     <span class="motag">Motion test</span>
+    <button id="introReplay" class="replay" aria-label="Play the introduction" title="Play the introduction">▶</button>
     <span class="lvlname" id="lvlName"></span>
     <span class="moves" id="moveCount"></span>
     <span class="moves" id="lvlProg"></span>
@@ -175,7 +196,7 @@ textarea{width:100%;box-sizing:border-box;min-height:160px;resize:vertical;backg
       <div class="stage">
         <canvas id="gl" aria-label="Your current 3D slice of the level"></canvas>
         <canvas id="hud"></canvas>
-        <div class="overlay" id="overlay"><div class="ov-tl"></div><div class="ov-tr"><button id="menuBtn" aria-expanded="false" aria-controls="moMenu" hidden>Menu</button><div class="momenu" id="moMenu" hidden></div></div><div class="ov-bm"></div><div class="ov-bl"></div><div class="ov-br"></div></div>
+        <div class="overlay" id="overlay"><div class="ov-tl"></div><div class="ov-tr"><button id="menuBtn" aria-expanded="false" aria-controls="moMenu" hidden>Menu</button><div class="momenu" id="moMenu" hidden></div></div><div class="ov-bm"></div><div class="tilthint" id="tiltHint" hidden><svg viewBox="0 0 40 40" width="40" height="40" aria-hidden="true"><g class="tiltphone"><rect x="13" y="6" width="14" height="28" rx="3" fill="none" stroke="#c98ce9" stroke-width="2.4"/><circle cx="20" cy="30" r="1.4" fill="#c98ce9"/></g></svg></div><div class="ov-bl"></div><div class="ov-br"></div></div>
         <div class="mocard" id="moCard" hidden>
           <b>Motion controls</b>
           <p>Hold your phone upright in front of you, like a camera. Turn your body to look around, and tilt the phone sideways like a steering wheel to swap Right with Ana.</p>
@@ -1526,7 +1547,7 @@ function render(){
     }
   }
   $('winBox').hidden=!PS.won;
-  updateViewText();updateMoves();
+  updateViewText();updateMoves();updHints();
 }
 function resize(){const dpr=Math.min(window.devicePixelRatio||1,2);fit($('gl'),dpr*0.75);fit($('hud'),dpr);fit($('gl2'),dpr*0.75);}
 if(G2)new ResizeObserver(resize).observe($('gl2'));
@@ -1695,6 +1716,165 @@ addEventListener('keydown',e=>{if(e.key.toLowerCase()==='v'){MO.off=0;MO.recal=t
 const canMotion=typeof DeviceOrientationEvent!=='undefined'&&matchMedia('(pointer: coarse)').matches;
 $('gyroBox').hidden=!canMotion;
 $('moCard').hidden=!canMotion;
+
+// ---------- introduction: line → square → cube → the fourth direction → slicing ----------
+// Wordless except for direction names. Tap to move on, Skip to leave. Plays on a first visit only;
+// the ▶ button by the title replays it.
+(function(){
+  const el=$('intro'),cv=$('introCv'),ctx=cv.getContext('2d'),dotsEl=$('introDots');
+  const COL={x:'#ef7d63',y:'#64a4ee',z:'#7dc58a',w:'#c98ce9',ink:'#e3e8eb',muted:'#8a99a3',block:'#4cc2bd'};
+  const DUR=[3.2,3.4,3.4,6.2,9];
+  const KEY='yor-intro-seen';
+  const C01=x=>x<0?0:x>1?1:x;
+  const E=x=>{x=C01(x);return x<.5?2*x*x:1-Math.pow(-2*x+2,2)/2;};
+  const rainbow=(w,a=1)=>`hsla(${Math.round(274*C01(w))},85%,60%,${a})`;
+  let b=0,t=0,T=0,run=false,last=0,W=0,H=0,S=1,th=-0.65,elv=0.42;
+  DUR.forEach(()=>dotsEl.append(document.createElement('i')));
+  function size(){
+    const dpr=Math.min(devicePixelRatio||1,2);W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);
+    S=Math.min(W,H*0.8)*0.19;
+  }
+  function P(x,y,z){
+    const c=Math.cos(th),s=Math.sin(th),x1=x*c-y*s,y1=x*s+y*c,ce=Math.cos(elv),se=Math.sin(elv);
+    const Y=z*ce-y1*se,d=y1*ce+z*se,k=S/(1+0.1*d);
+    return [W/2+x1*k,H*0.46-Y*k];
+  }
+  const A=[0.62,0,0.62];                       // how the fourth direction is drawn on screen
+  const add=(p,w)=>[p[0]+A[0]*w,p[1]+A[1]*w,p[2]+A[2]*w];
+  function seg(a,c,col,lw=2,alpha=1,dash){
+    const p=P(...a),q=P(...c);ctx.save();ctx.globalAlpha=alpha;ctx.strokeStyle=col;ctx.lineWidth=lw;ctx.lineCap='round';
+    if(dash)ctx.setLineDash(dash);ctx.beginPath();ctx.moveTo(...p);ctx.lineTo(...q);ctx.stroke();ctx.restore();
+  }
+  function arrow(a,c,col,txt,alpha,dash){
+    if(alpha<=0)return;
+    seg(a,c,col,2.5,alpha,dash);
+    const p=P(...a),q=P(...c),dx=q[0]-p[0],dy=q[1]-p[1],l=Math.hypot(dx,dy)||1,ux=dx/l,uy=dy/l;
+    ctx.save();ctx.globalAlpha=alpha;ctx.fillStyle=col;ctx.beginPath();
+    ctx.moveTo(q[0]+ux*7,q[1]+uy*7);ctx.lineTo(q[0]-uy*5,q[1]+ux*5);ctx.lineTo(q[0]+uy*5,q[1]-ux*5);ctx.fill();
+    ctx.font='600 13px "IBM Plex Mono", ui-monospace, monospace';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(txt,q[0]+ux*24,q[1]+uy*16);ctx.restore();
+  }
+  function axisPair(v,col,n1,n2,alpha,dash){
+    const a=(s,r)=>v.map(x=>x*s*r);
+    arrow(a(1,1.15),a(1,1.75),col,n1,alpha,dash);
+    arrow(a(-1,1.15),a(-1,1.75),col,n2,alpha,dash);
+  }
+  function box(c,h,col,lw,alpha,fill){
+    const [cx,cy,cz]=c,[hx,hy,hz]=h,V=[];
+    for(const sx of[-1,1])for(const sy of[-1,1])for(const sz of[-1,1])V.push([cx+sx*hx,cy+sy*hy,cz+sz*hz]);
+    if(fill){
+      ctx.save();ctx.globalAlpha=alpha*0.16;ctx.fillStyle=fill;
+      for(const f of[[0,1,3,2],[4,5,7,6],[0,1,5,4],[2,3,7,6],[0,2,6,4],[1,3,7,5]]){
+        ctx.beginPath();f.forEach((i,n)=>{const p=P(...V[i]);n?ctx.lineTo(...p):ctx.moveTo(...p);});ctx.closePath();ctx.fill();
+      }
+      ctx.restore();
+    }
+    for(let i=0;i<8;i++)for(const bit of[1,2,4]){const j=i^bit;if(j>i)seg(V[i],V[j],col,lw,alpha);}
+    return V;
+  }
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    th=-0.65+0.12*Math.sin(T*0.35);
+    const p=reduced?[3,3.3,3.3,6,7.2][b]:t;   // reduced motion: show each beat's finished picture
+    if(b<=2){
+      elv=0.42;
+      // b0: a dot draws a line; b1: the line sweeps a square; b2: the square sweeps a cube
+      const lx=b===0?E(p/2.2):1, hy=b===0?0:b===1?E(p/2.4):1, hz=b<2?0:E(p/2.4);
+      if(b===0){
+        seg([-1,0,0],[-1+2*lx,0,0],COL.ink,3);
+        const d=P(-1+2*lx,0,0);ctx.fillStyle=COL.ink;ctx.beginPath();ctx.arc(d[0],d[1],5,0,7);ctx.fill();
+      }else box([0,0,0],[1,hy,hz],COL.ink,2,1,COL.ink);
+      axisPair([1,0,0],COL.x,'East','West',b===0?C01((p-2)/0.6):1);
+      if(b>=1)axisPair([0,1,0],COL.y,'North','South',b===1?C01((p-2.2)/0.6):1);
+      if(b>=2)axisPair([0,0,1],COL.z,'Up','Down',C01((p-2.2)/0.6));
+    }else if(b===3){
+      elv=0.42;
+      // the cube slides kata, then sweeps ana, leaving a rainbow of copies: a tesseract
+      const back=E(p/1.1),sweep=E((p-1.3)/3.2),link=C01((p-4.4)/0.8);
+      const w=-back+2*sweep;
+      const fadeAx=0.35+0.65*(1-C01(p/1.2));
+      axisPair([1,0,0],COL.x,'East','West',fadeAx);axisPair([0,1,0],COL.y,'North','South',fadeAx);axisPair([0,0,1],COL.z,'Up','Down',fadeAx);
+      axisPair(A,COL.w,'Ana','Kata',C01((p-0.3)/0.7),[6,5]);
+      if(sweep>0)for(let s=-1;s<w-0.01;s+=0.25){box(add([0,0,0],s),[1,1,1],rainbow((s+1)/2),1.4,0.45);}
+      const V0=box(add([0,0,0],-1),[1,1,1],rainbow(0),1.2,link*0.6);
+      const col=sweep>0||back>0.5?rainbow((w+1)/2):COL.ink;
+      box(add([0,0,0],w),[1,1,1],col,2.4,1,col);
+      if(link>0)V0.forEach(v=>seg(v,add(v,2),COL.w,1.2,link*0.5));
+    }else{
+      // a flat sheet only ever sees the slice of the cube that passes through it
+      const look=E((p-4.2)/1.4);elv=0.42+look*(Math.PI/2-0.08-0.42);
+      const pass1=(p-0.3)/3.6,pass2=(p-5.8)/2.8;
+      const cz=pass1<1.05?-1.9+3.8*C01(pass1):1.9-3.8*C01(pass2);   // up through the sheet, then back down
+      const cubeA=1-look;
+      ctx.save();ctx.globalAlpha=0.9;
+      const sh=[[-1.7,-1.7,0],[1.7,-1.7,0],[1.7,1.7,0],[-1.7,1.7,0]].map(v=>P(...v));
+      ctx.fillStyle='rgba(201,140,233,0.10)';ctx.strokeStyle='rgba(201,140,233,0.55)';ctx.lineWidth=1.5;
+      ctx.beginPath();sh.forEach((q,n)=>n?ctx.lineTo(...q):ctx.moveTo(...q));ctx.closePath();ctx.fill();ctx.stroke();ctx.restore();
+      if(cubeA>0.02)box([0,0,cz],[0.65,0.65,0.65],COL.block,2,cubeA);
+      if(Math.abs(cz)<0.65){
+        const sq=[[-0.65,-0.65,0],[0.65,-0.65,0],[0.65,0.65,0],[-0.65,0.65,0]].map(v=>P(...v));
+        ctx.save();ctx.fillStyle=COL.block;ctx.globalAlpha=0.85;ctx.beginPath();sq.forEach((q,n)=>n?ctx.lineTo(...q):ctx.moveTo(...q));ctx.closePath();ctx.fill();ctx.restore();
+      }
+      if(p>DUR[4]-0.8){ctx.fillStyle=`rgba(13,17,21,${C01((p-(DUR[4]-0.8))/0.8)})`;ctx.fillRect(0,0,W,H);}
+    }
+    [...dotsEl.children].forEach((d,i)=>d.className=i===b?'on':i<b?'past':'');
+  }
+  function frame(now){
+    if(!run)return;
+    const dt=Math.min(0.05,(now-last)/1000);last=now;T+=dt;
+    t+=dt;
+    if(t>=DUR[b]){if(b<DUR.length-1){b++;t=0;}else{close();return;}}
+    draw();requestAnimationFrame(frame);
+  }
+  function open(){
+    el.hidden=false;el.classList.remove('out');size();b=0;t=0;run=true;last=performance.now();requestAnimationFrame(frame);
+  }
+  function close(){
+    run=false;try{localStorage.setItem(KEY,'1');}catch(e){}
+    el.classList.add('out');setTimeout(()=>{el.hidden=true;el.classList.remove('out');},450);
+    dirty=true;
+  }
+  function next(){if(!run)return;if(b<DUR.length-1){b++;t=0;}else close();}
+  el.addEventListener('pointerdown',e=>{if(e.target.closest('#introSkip'))return;e.preventDefault();next();});
+  $('introSkip').addEventListener('click',close);
+  $('introReplay').addEventListener('click',open);
+  addEventListener('keydown',e=>{
+    if(el.hidden)return;
+    e.stopImmediatePropagation();e.preventDefault();
+    if(e.key==='Escape')close();else if([' ','Enter','ArrowRight'].includes(e.key))next();
+  },true);
+  addEventListener('resize',()=>{if(!el.hidden)size();});
+  let seen=false;try{seen=!!localStorage.getItem(KEY);}catch(e){}
+  if(!seen)open();
+})();
+
+// ---------- hints: glow the control you need, the first time you need it ----------
+const HINT_KEY='yor-hints';let HINTS={};try{HINTS=JSON.parse(localStorage.getItem(HINT_KEY)||'{}')||{};}catch(e){}
+let hintLayer=null;
+function hintDone(k){if(HINTS[k])return;HINTS[k]=1;try{localStorage.setItem(HINT_KEY,JSON.stringify(HINTS));}catch(e){}}
+function updHints(){
+  if(!ENG||!PS.s)return;
+  const WD=ENG.W*ENG.D,p=PS.s.p,k=Math.floor(p/WD)%ENG.L;
+  if(hintLayer!==null&&k!==hintLayer)hintDone('ana');
+  hintLayer=k;
+  if(axisOf(PS.F[3])!==3)hintDone('swap');
+  const four=ENG.L>1&&Object.keys(LEVELS).indexOf(levelKey)!==0;
+  document.querySelectorAll('[data-hold="e"],[data-hold="q"]').forEach(x=>x.classList.toggle('glow',four&&!HINTS.ana));
+  let near=false;
+  if(four&&!HINTS.swap&&axisOf(PS.F[3])===3){
+    const i=p%ENG.W,j=Math.floor(p/ENG.W)%ENG.D;
+    for(const q of PS.B){
+      const qk=Math.floor(q/WD)%ENG.L;
+      if(Math.abs(qk-k)!==1||Math.floor(q/ENG.WDL)!==Math.floor(p/ENG.WDL))continue;
+      if(Math.abs(q%ENG.W-i)<=1&&Math.abs(Math.floor(q/ENG.W)%ENG.D-j)<=1)near=true;
+    }
+  }
+  const phone=matchMedia('(max-width:780px)').matches;
+  $('tiltHint').hidden=!(near&&MO.on);
+  $('swapBtn').classList.toggle('glow',near&&!MO.on);
+  $('menuBtn').classList.toggle('glow',near&&!MO.on&&phone&&$('moMenu').hidden);
+}
 
 // ---------- boot ----------
 (function boot(){
