@@ -76,6 +76,8 @@ textarea{width:100%;box-sizing:border-box;min-height:160px;resize:vertical;backg
 .winbox{position:absolute;inset:auto 0 0 0;display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:10px;padding:12px;background:linear-gradient(transparent,rgba(13,17,21,.92) 35%);pointer-events:auto}
 .winbox b{font-family:var(--display);font-size:20px;color:var(--goal)}
 .winbox button{background:#1f5c58;border-color:var(--block);font-weight:600}
+.winbox.final{inset:0;flex-direction:column;gap:14px;padding:24px;background:rgba(13,17,21,.88);text-align:center}
+.winbox.final #winText{font-family:var(--display);font-weight:600;font-size:clamp(18px,4.6vw,26px);line-height:1.3;max-width:20ch;color:var(--ink)}
 
 .controls{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:flex-start;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
 .pad{display:grid;grid-template-columns:repeat(3,44px);grid-template-rows:repeat(2,40px);gap:4px}
@@ -103,6 +105,28 @@ textarea{width:100%;box-sizing:border-box;min-height:160px;resize:vertical;backg
 .sitefoot{display:flex;justify-content:center;padding-top:8px;font-size:13px}
 .sitefoot a{color:var(--muted);text-decoration:none;border-bottom:1px solid var(--line)}
 .sitefoot a:hover,.sitefoot a:focus-visible{color:var(--ink);border-color:var(--ink)}
+.motag{font:600 11px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--beam);border:1px solid #2b5d5b;border-radius:4px;padding:1px 6px}
+.mocard{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(320px,calc(100% - 32px));box-sizing:border-box;z-index:4;display:flex;flex-direction:column;gap:10px;padding:16px;border-radius:10px;background:rgba(13,17,21,.9);border:1px solid var(--line)}
+.mocard b{font-family:var(--display);font-size:18px}
+.mocard p{margin:0;font-size:13.5px;color:var(--ink)}
+.mocard .row button{flex:1}
+.momenu{display:flex;flex-direction:column;gap:6px;align-items:stretch;padding:8px;border-radius:8px;background:rgba(13,17,21,.86);border:1px solid rgba(255,255,255,.12);width:190px;pointer-events:auto}
+.momenu .swapbox{width:auto!important}
+.momenu #gyroBox{display:flex}.momenu #gyroBtn{flex:1}
+.intro{position:fixed;inset:0;z-index:50;background:var(--bg);touch-action:none;transition:opacity .45s}
+.intro.out{opacity:0}
+.intro canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.introDots{position:absolute;left:0;right:0;bottom:calc(28px + env(safe-area-inset-bottom,0px));display:flex;justify-content:center;gap:8px;pointer-events:none}
+.introDots i{width:7px;height:7px;border-radius:50%;background:var(--line)}
+.introDots i.past{background:var(--muted)}.introDots i.on{background:var(--w)}
+#introSkip{position:absolute;top:calc(14px + env(safe-area-inset-top,0px));right:calc(14px + env(safe-area-inset-right,0px));background:transparent}
+.replay{padding:2px 9px;font-size:12px;color:var(--muted)}
+@keyframes glowp{0%,100%{box-shadow:0 0 0 1px rgba(201,140,233,.5)}50%{box-shadow:0 0 0 4px rgba(201,140,233,.85)}}
+.glow{border-color:var(--w)!important;animation:glowp 1.3s ease-in-out infinite}
+.tilthint{position:absolute;top:56px;left:50%;transform:translateX(-50%);pointer-events:none;padding:4px;border-radius:10px;background:rgba(13,17,21,.6)}
+@keyframes tiltp{0%,100%{transform:rotate(-24deg)}50%{transform:rotate(24deg)}}
+.tiltphone{transform-origin:20px 20px;animation:tiltp 1.6s ease-in-out infinite}
+@media (prefers-reduced-motion:reduce){.glow{animation:none;box-shadow:0 0 0 3px rgba(201,140,233,.8)}.tiltphone{animation:none;transform:rotate(20deg)}}
 .err{padding:24px;color:var(--x)}
 
 /* phones: controls float over the live view so you never scroll while playing */
@@ -126,6 +150,8 @@ textarea{width:100%;box-sizing:border-box;min-height:160px;resize:vertical;backg
   .overlay .swap{background:rgba(58,38,71,.82);border-color:#5d3d70}
   .ov-tl{top:8px;left:8px;flex-direction:column}
   .ov-tr{top:8px;right:8px;flex-direction:column;align-items:flex-end}
+  .p-main .stage{height:calc(100svh - 120px)!important}
+  .p-main .bar+.bar{display:none}
   .ov-bl{bottom:10px;left:8px}
   .ov-br{bottom:10px;right:8px}
   .ov-bm{bottom:116px;left:8px;right:8px;justify-content:center}
@@ -148,8 +174,15 @@ textarea{width:100%;box-sizing:border-box;min-height:160px;resize:vertical;backg
 </style>
 
 <div class="app">
+  <div class="intro" id="intro" hidden>
+    <canvas id="introCv" aria-label="Animation: a line becomes a square, then a cube, then sweeps into a fourth direction"></canvas>
+    <div class="introDots" id="introDots"></div>
+    <button id="introSkip">Skip</button>
+  </div>
+
   <header>
     <h1>Your Other <span>Right!</span></h1>
+    <button id="introReplay" class="replay" aria-label="Play the introduction" title="Play the introduction">▶</button>
     <span class="lvlname" id="lvlName"></span>
     <span class="moves" id="moveCount"></span>
     <span class="moves" id="lvlProg"></span>
@@ -163,7 +196,12 @@ textarea{width:100%;box-sizing:border-box;min-height:160px;resize:vertical;backg
       <div class="stage">
         <canvas id="gl" aria-label="Your current 3D slice of the level"></canvas>
         <canvas id="hud"></canvas>
-        <div class="overlay" id="overlay"><div class="ov-tl"></div><div class="ov-tr"></div><div class="ov-bm"></div><div class="ov-bl"></div><div class="ov-br"></div></div>
+        <div class="overlay" id="overlay"><div class="ov-tl"></div><div class="ov-tr"><button id="menuBtn" aria-expanded="false" aria-controls="moMenu" hidden>Menu</button><div class="momenu" id="moMenu" hidden></div></div><div class="ov-bm"></div><div class="tilthint" id="tiltHint" hidden><svg viewBox="0 0 40 40" width="40" height="40" aria-hidden="true"><g class="tiltphone"><rect x="13" y="6" width="14" height="28" rx="3" fill="none" stroke="#c98ce9" stroke-width="2.4"/><circle cx="20" cy="30" r="1.4" fill="#c98ce9"/></g></svg></div><div class="ov-bl"></div><div class="ov-br"></div></div>
+        <div class="mocard" id="moCard" hidden>
+          <b>Motion controls</b>
+          <p>Hold your phone upright in front of you, like a camera. Turn your body to look around, and tilt the phone sideways like a steering wheel to swap Right with Ana.</p>
+          <div class="row"><button id="moStart" class="swap">Start with motion</button><button id="moSkip">Use touch</button></div>
+        </div>
         <div class="winbox" id="winBox" hidden><b>Solved</b><span id="winText"></span><button id="nextBtn">Next level</button><button id="againBtn">Play again</button></div>
       </div>
       <div class="bar"><span class="status" id="status" aria-live="polite"></span></div>
@@ -217,7 +255,7 @@ textarea{width:100%;box-sizing:border-box;min-height:160px;resize:vertical;backg
       </div>
       <button id="snapBtn" title="Turn to the nearest straight-on grid view (V)">Snap view</button>
     </div>
-    <div class="gyrobox" id="gyroBox" hidden><button id="gyroBtn" aria-pressed="false" title="Look around by moving your phone">Tilt to look</button></div>
+    <div class="gyrobox" id="gyroBox" hidden><button id="gyroBtn" aria-pressed="false" title="Turn motion controls on or off">Motion: off</button></div>
     <div class="tilts" id="tilts" hidden>
       <span>Mirror ahead</span>
       <button data-tilt="0">E·N /</button><button data-tilt="1">E·N \</button>
@@ -1362,7 +1400,7 @@ function tick(now){
 if(glOK){
   let drag=null;const cv=$('gl');
   cv.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY};cv.setPointerCapture(e.pointerId);});
-  cv.addEventListener('pointermove',e=>{if(!drag)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;drag={x:e.clientX,y:e.clientY};yaw(dx*0.006);PS.pitch=Math.max(-1.2,Math.min(1.2,PS.pitch-dy*0.005));dirty=true;});
+  cv.addEventListener('pointermove',e=>{if(!drag)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;drag={x:e.clientX,y:e.clientY};MO.off+=dx*0.006;PS.pitch=Math.max(-1.2,Math.min(1.2,PS.pitch-dy*0.005));dirty=true;});
   ['pointerup','pointercancel'].forEach(t=>cv.addEventListener(t,()=>drag=null));
 }
 const keymap={w:'w',a:'a',s:'s',d:'d',q:'q',e:'e',c:'c',z:'z',arrowup:'w',arrowdown:'s'};
@@ -1457,7 +1495,7 @@ function checkWin(){
     const keys=Object.keys(LEVELS),i=keys.indexOf(levelKey);
     $('nextBtn').hidden=!(i>=0&&i<keys.length-1);
     if(i>=0){const best=PROG.solved[levelKey];if(!best||n<best)PROG.solved[levelKey]=n;saveProg();fillSelect();$('lvlSel').value=levelKey;}
-    if(i===keys.length-1)$('winText').textContent=`${n} move${n===1?'':'s'}. That was the last level. Thanks for playing!`;
+    if(i===keys.length-1){$('winText').textContent='Thanks for playing this demo! More levels and features to come!';$('winBox').classList.add('final');}
     else if(i>=0)$('winText').textContent=`${n} move${n===1?'':'s'}. Up next: ${keys[i+1].replace(/^\d+\. /,'')}`;
   }
 }
@@ -1479,10 +1517,11 @@ function drawWith(o,P,F,pitch,mode,mapA,mapB){
 }
 function render(){
   if(!ENG)return;
+  moUpdate();
   if(glOK){
-    const e2=PS.F[2];
-    drawWith({g:gl,canvas:$('gl'),u:{...U,...mapU},t:tex},PS.vis.map((x,i)=>i===1?x:x-CAM_BACK*e2[i]),PS.F,PS.pitch,0);
-    drawHUD();
+    const VF=viewFrame(),keep=PS.F,e2=VF[2];
+    drawWith({g:gl,canvas:$('gl'),u:{...U,...mapU},t:tex},PS.vis.map((x,i)=>i===1?x:x-CAM_BACK*e2[i]),VF,PS.pitch,0);
+    PS.F=VF;drawHUD();PS.F=keep;
   }
   if(G2&&PS.s){
     const slot=['Right','Up','Forward'][PS.armed];
@@ -1508,7 +1547,7 @@ function render(){
     }
   }
   $('winBox').hidden=!PS.won;
-  updateViewText();updateMoves();
+  updateViewText();updateMoves();updHints();
 }
 function resize(){const dpr=Math.min(window.devicePixelRatio||1,2);fit($('gl'),dpr*0.75);fit($('hud'),dpr);fit($('gl2'),dpr*0.75);}
 if(G2)new ResizeObserver(resize).observe($('gl2'));
@@ -1530,7 +1569,7 @@ function loadLevel(text,key){
   const ks=Object.keys(LEVELS),ix=ks.indexOf(key);
   $('lvlProg').textContent=ix>=0?`Level ${ix+1} of ${ks.length} · ${Object.keys(PROG.solved).filter(k=>k in LEVELS).length} solved`:'Your own level';
   $('lvlName').textContent=LV.title;
-  $('winBox').hidden=true;PS.msg=null;
+  $('winBox').hidden=true;$('winBox').classList.remove('final');PS.msg=null;
   resetPlay();PS.armed=2;document.querySelectorAll('[data-arm]').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.arm===2));
   $('lvlSel').value=key||'__pasted';
   dirty=true;
@@ -1557,66 +1596,320 @@ $('showBtn').addEventListener('click',()=>{$('lvlText').value=serialize(LV);});
 $('nextBtn').addEventListener('click',()=>{const keys=Object.keys(LEVELS),i=keys.indexOf(levelKey);if(i>=0&&i<keys.length-1)loadLevel(LEVELS[keys[i+1]],keys[i+1]);});
 $('againBtn').addEventListener('click',()=>{$('winBox').hidden=true;resetPlay();});
 
-// ---------- phone layout: move the control groups onto the view ----------
+// ---------- phone layout: slim overlay with a menu ----------
 (function(){
   const box=document.querySelector('.app>.controls');
   const g={pad:box.querySelector('.pad'),ana:box.querySelector('.stack.ana'),climb:box.querySelector('.stack.climbs'),
-    undo:box.querySelector('#undoMove').parentElement,swap:box.querySelector('.swapbox'),tilts:box.querySelector('#tilts'),gyro:box.querySelector('#gyroBox')};
-  const ov=s=>document.querySelector('#overlay .'+s);
+    undoStack:box.querySelector('#undoMove').parentElement,undo:$('undoMove'),restart:$('restartBtn'),
+    swap:box.querySelector('.swapbox'),tilts:box.querySelector('#tilts'),gyro:box.querySelector('#gyroBox')};
+  const ov=s=>document.querySelector('#overlay .'+s),menu=$('moMenu');
   const mq=matchMedia('(max-width:780px)');
   function place(){
-    if(mq.matches){ov('ov-bl').append(g.pad);ov('ov-br').append(g.ana,g.climb);ov('ov-tl').append(g.undo,g.gyro);ov('ov-tr').append(g.swap);ov('ov-bm').append(g.tilts);}
-    else box.append(g.pad,g.ana,g.climb,g.undo,g.swap,g.gyro,g.tilts);
+    if(mq.matches){
+      ov('ov-bl').append(g.pad);ov('ov-br').append(g.ana,g.climb);ov('ov-tl').append(g.undo);
+      ov('ov-bm').append(g.tilts);menu.append(g.restart,g.gyro,g.swap);$('menuBtn').hidden=false;
+    }else{
+      g.undoStack.append(g.undo,g.restart);
+      box.append(g.pad,g.ana,g.climb,g.undoStack,g.swap,g.gyro,g.tilts);
+      $('menuBtn').hidden=true;menu.hidden=true;
+    }
     resize();dirty=true;
   }
   mq.addEventListener?mq.addEventListener('change',place):mq.addListener(place);
   place();
+  $('menuBtn').addEventListener('click',()=>{menu.hidden=!menu.hidden;$('menuBtn').setAttribute('aria-expanded',!menu.hidden);});
+  menu.addEventListener('click',e=>{if(e.target.closest('#restartBtn,#swapBtn,#unswapBtn,#snapBtn,#gyroBtn')){menu.hidden=true;$('menuBtn').setAttribute('aria-expanded',false);}});
 })();
 
-// ---------- tilt to look: the phone's motion sensors steer the view ----------
-// Works only where the browser hands the page motion data: a phone, over HTTPS, on your own site.
-// (claude.ai artifacts never receive it.) Turning your body turns the view; tilting looks up and down.
-const GY={on:false,got:false,h:null,p0:0,pBase:0,recal:false,timer:0};
-function camDir(a,b,g){
-  // direction out of the back of the phone, from the W3C alpha/beta/gamma angles
-  const r=Math.PI/180,cA=Math.cos(a*r),sA=Math.sin(a*r),cB=Math.cos(b*r),sB=Math.sin(b*r),cG=Math.cos(g*r),sG=Math.sin(g*r);
-  const fx=-(cA*sG+cG*sA*sB),fy=-(sA*sG-cA*cG*sB),fz=-(cB*cG);
-  return {heading:Math.atan2(fx,fy),pitch:Math.asin(Math.max(-1,Math.min(1,fz)))};
+// ---------- motion controls ----------
+// The game keeps a logical facing that is always a grid direction (PS.F). Turning your body adds a
+// viewing offset on top of it (MO.off); past about 54° the logical facing steps to the next grid
+// direction and the offset shrinks by 90°, so movement and swaps always stay on the grid.
+// Rolling the phone sideways scrubs a swap of Right with Ana: the slice turns with your wrist and
+// the swap commits once you pass FULL. Level the phone before rolling again.
+// Motion data only reaches pages served over HTTPS from a normal website (not claude.ai artifacts).
+const MO={on:false,got:false,h:null,p0:0,pBase:PITCH0,off:0,roll:0,sc:null,hold:false,recal:false,timer:0};
+const DEG=Math.PI/180,DEAD=7*DEG,FULL=40*DEG,TURN_AT=Math.PI/4+9*DEG;
+const wrapA=a=>Math.atan2(Math.sin(a),Math.cos(a));
+function devAxes(a,b,g){
+  const cA=Math.cos(a*DEG),sA=Math.sin(a*DEG),cB=Math.cos(b*DEG),sB=Math.sin(b*DEG),cG=Math.cos(g*DEG),sG=Math.sin(g*DEG);
+  const fwd=[-(cA*sG+cG*sA*sB),-(sA*sG-cA*cG*sB),-(cB*cG)];   // out of the back of the phone
+  const right=[cA*cG-sA*sB*sG,cG*sA+cA*sB*sG,-cB*sG];         // toward the phone's right edge
+  const up=[-cB*sA,cA*cB,sB];                                 // toward the top of the screen
+  return {heading:Math.atan2(fwd[0],fwd[1]),pitch:Math.asin(Math.max(-1,Math.min(1,fwd[2]))),roll:Math.atan2(-right[2],up[2])};
 }
 function onOrient(e){
   if(e.alpha==null||e.beta==null||e.gamma==null)return;
-  GY.got=true;
-  const c=camDir(e.alpha,e.beta,e.gamma);
-  if(GY.h==null||GY.recal){GY.h=c.heading;GY.p0=c.pitch;GY.pBase=GY.recal?PITCH0:PS.pitch;GY.recal=false;return;}
-  let d=c.heading-GY.h;d=Math.atan2(Math.sin(d),Math.cos(d));
-  if(Math.abs(c.pitch)>1.3)d=0;            // pointing at floor or sky: heading is unreliable
-  d*=0.6;GY.h=Math.atan2(Math.sin(GY.h+d),Math.cos(GY.h+d));   // light smoothing
-  const busy=PS.snapA||PS.turn;
-  if(!busy&&Math.abs(d)>0.0005)yaw(d);
-  if(!busy){const tp=Math.max(-1.2,Math.min(1.2,GY.pBase+(c.pitch-GY.p0)));PS.pitch+=(tp-PS.pitch)*0.5;}
+  MO.got=true;
+  const c=devAxes(e.alpha,e.beta,e.gamma);
+  if(MO.h==null||MO.recal){
+    MO.h=c.heading;MO.p0=c.pitch;MO.pBase=PITCH0;
+    if(MO.recal){MO.off=0;MO.recal=false;}
+    MO.roll=c.roll;dirty=true;return;
+  }
+  let d=wrapA(c.heading-MO.h);
+  if(Math.abs(c.pitch)>1.3)d=0;                 // pointing at floor or sky: heading is unreliable
+  d*=0.6;MO.h=wrapA(MO.h+d);MO.off+=d;
+  const tp=Math.max(-1.2,Math.min(1.2,MO.pBase+(c.pitch-MO.p0)));
+  if(!PS.snapA)PS.pitch+=(tp-PS.pitch)*0.5;
+  MO.roll+=(c.roll-MO.roll)*0.5;
   dirty=true;
 }
-function setGyro(on){
-  GY.on=on;$('gyroBtn').setAttribute('aria-pressed',on);
-  if(on){GY.h=null;GY.got=false;addEventListener('deviceorientation',onOrient);
-    clearTimeout(GY.timer);
-    GY.timer=setTimeout(()=>{if(GY.on&&!GY.got){setGyro(false);say("This page can't read your phone's motion sensors here. Tilt to look works when the game is hosted on your own website.",'warn');}},1500);
-    say('Tilt to look is on. Hold your phone up and turn to look around; Snap view recentres.');}
-  else{removeEventListener('deviceorientation',onOrient);}
+function startScrub(){
+  const F=PS.F,hid=axisOf(F[3]);
+  if(hid===3){
+    // swap Right with the hidden direction, keeping the hidden direction pointing its positive way
+    const v=F[0],ax=axisOf(v),sgn=Math.sign(v[ax]);
+    MO.sc={slot:0,sg:-sgn,hs:sgn,p:0};
+  }else{
+    const slot=[0,1,2].find(i=>axisOf(F[i])===3);
+    const home=swapTarget(slot).F;
+    MO.sc={slot,sg:Math.sign(home[slot].reduce((a,x,k)=>a+x*F[3][k],0))||1,hs:1,p:0};
+  }
 }
-$('gyroBtn').addEventListener('click',async()=>{
-  if(GY.on){setGyro(false);say('Tilt to look is off.');return;}
+function moUpdate(){
+  if(!MO.sc&&!PS.snapA&&!PS.turn){
+    while(MO.off>TURN_AT){PS.F=snap(orthonorm(rotPlane(PS.F,0,2,-Math.PI/2)));MO.off-=Math.PI/2;}
+    while(MO.off<-TURN_AT){PS.F=snap(orthonorm(rotPlane(PS.F,0,2,Math.PI/2)));MO.off+=Math.PI/2;}
+  }
+  if(!MO.on)return;
+  const r=Math.abs(MO.roll);
+  if(MO.hold){if(r<DEAD)MO.hold=false;return;}
+  if(!MO.sc){if(r>DEAD&&!PS.snapA&&!PS.turn&&!PS.mv)startScrub();else return;}
+  const s=Math.max(0,Math.min(1,(r-DEAD)/(FULL-DEAD)));
+  MO.sc.p=ease(s);
+  if(s>=1){
+    const sc=MO.sc,wasSwapped=axisOf(PS.F[3])!==3;
+    PS.F=snap(orthonorm(rotPlane(PS.F,sc.slot,3,sc.sg*Math.PI/2)));PS.hs=sc.hs;
+    MO.sc=null;MO.hold=true;
+    say(wasSwapped?'Back to the normal view. Level the phone to swap again.':'Swapped. Level the phone, then tilt again to swap back.');
+  }else if(r<DEAD){MO.sc=null;}
+}
+function viewFrame(){
+  let F=PS.F;
+  if(MO.sc&&MO.sc.p>0)F=rotPlane(F,MO.sc.slot,3,MO.sc.sg*MO.sc.p*Math.PI/2);
+  if(MO.off)F=rotPlane(F,0,2,-MO.off);
+  return F;
+}
+function setMotion(on){
+  MO.on=on;$('gyroBtn').setAttribute('aria-pressed',on);$('gyroBtn').textContent=on?'Motion: on':'Motion: off';
+  if(on){
+    MO.h=null;MO.got=false;MO.sc=null;MO.hold=false;addEventListener('deviceorientation',onOrient);
+    clearTimeout(MO.timer);
+    MO.timer=setTimeout(()=>{if(MO.on&&!MO.got){setMotion(false);say("This browser isn't sending motion data, so the game is using touch controls.",'warn');}},1500);
+  }else{removeEventListener('deviceorientation',onOrient);MO.sc=null;dirty=true;}
+}
+async function askMotion(){
   try{
     if(typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function'){
       const r=await DeviceOrientationEvent.requestPermission();
-      if(r!=='granted'){say('Motion access was declined, so tilt to look stays off.','warn');return;}
+      if(r!=='granted'){say('Motion access was declined, so the game is using touch controls.','warn');return false;}
     }
-  }catch(err){say("This page can't ask for motion access here. Tilt to look works when the game is hosted on your own website.",'warn');return;}
-  setGyro(true);
-});
-$('snapBtn').addEventListener('click',()=>{if(GY.on)GY.recal=true;});
-addEventListener('keydown',e=>{if(e.key.toLowerCase()==='v'&&GY.on)GY.recal=true;});
-// Tilt to look is parked for now: the button stays hidden.
+  }catch(err){say("This page couldn't ask for motion access, so the game is using touch controls.",'warn');return false;}
+  setMotion(true);return true;
+}
+$('gyroBtn').addEventListener('click',()=>{if(MO.on){setMotion(false);say('Motion is off. Drag the view to look around.');}else askMotion();});
+$('moStart').addEventListener('click',async()=>{$('moCard').hidden=true;if(await askMotion())say('Turn to look around. Tilt the phone sideways to swap Right with Ana.');});
+$('moSkip').addEventListener('click',()=>{$('moCard').hidden=true;});
+$('snapBtn').addEventListener('click',()=>{MO.off=0;MO.recal=true;dirty=true;});
+addEventListener('keydown',e=>{if(e.key.toLowerCase()==='v'){MO.off=0;MO.recal=true;dirty=true;}});
+const canMotion=typeof DeviceOrientationEvent!=='undefined'&&matchMedia('(pointer: coarse)').matches;
+$('gyroBox').hidden=!canMotion;
+$('moCard').hidden=!canMotion;
+
+// ---------- introduction: line → square → cube → the fourth direction → slicing ----------
+// Wordless except for direction names. Tap to move on, Skip to leave. Plays on a first visit only;
+// the ▶ button by the title replays it.
+(function(){
+  const el=$('intro'),cv=$('introCv'),ctx=cv.getContext('2d'),dotsEl=$('introDots');
+  const COL={x:'#ef7d63',y:'#64a4ee',z:'#7dc58a',w:'#c98ce9',ink:'#e3e8eb',muted:'#8a99a3',block:'#4cc2bd'};
+  const DUR=[3.2,3.4,3.4,6.2,9,7.4];
+  const KEY='yor-intro-seen';
+  const C01=x=>x<0?0:x>1?1:x;
+  const E=x=>{x=C01(x);return x<.5?2*x*x:1-Math.pow(-2*x+2,2)/2;};
+  const rainbow=(w,a=1)=>`hsla(${Math.round(274*C01(w))},85%,60%,${a})`;
+  let b=0,t=0,T=0,run=false,last=0,W=0,H=0,S=1,th=-0.65,elv=0.42;
+  DUR.forEach(()=>dotsEl.append(document.createElement('i')));
+  function size(){
+    const dpr=Math.min(devicePixelRatio||1,2);W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);
+    S=Math.min(W,H*0.8)*0.19;
+  }
+  function P(x,y,z){
+    const c=Math.cos(th),s=Math.sin(th),x1=x*c-y*s,y1=x*s+y*c,ce=Math.cos(elv),se=Math.sin(elv);
+    const Y=z*ce-y1*se,d=y1*ce+z*se,k=S/(1+0.1*d);
+    return [W/2+x1*k,H*0.46-Y*k];
+  }
+  const A=[0.62,0,0.62];                       // how the fourth direction is drawn on screen
+  const add=(p,w)=>[p[0]+A[0]*w,p[1]+A[1]*w,p[2]+A[2]*w];
+  function seg(a,c,col,lw=2,alpha=1,dash){
+    const p=P(...a),q=P(...c);ctx.save();ctx.globalAlpha=alpha;ctx.strokeStyle=col;ctx.lineWidth=lw;ctx.lineCap='round';
+    if(dash)ctx.setLineDash(dash);ctx.beginPath();ctx.moveTo(...p);ctx.lineTo(...q);ctx.stroke();ctx.restore();
+  }
+  function arrow(a,c,col,txt,alpha,dash){
+    if(alpha<=0)return;
+    seg(a,c,col,2.5,alpha,dash);
+    const p=P(...a),q=P(...c),dx=q[0]-p[0],dy=q[1]-p[1],l=Math.hypot(dx,dy)||1,ux=dx/l,uy=dy/l;
+    ctx.save();ctx.globalAlpha=alpha;ctx.fillStyle=col;ctx.beginPath();
+    ctx.moveTo(q[0]+ux*7,q[1]+uy*7);ctx.lineTo(q[0]-uy*5,q[1]+ux*5);ctx.lineTo(q[0]+uy*5,q[1]-ux*5);ctx.fill();
+    ctx.font='600 13px "IBM Plex Mono", ui-monospace, monospace';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(txt,q[0]+ux*24,q[1]+uy*16);ctx.restore();
+  }
+  function axisPair(v,col,n1,n2,alpha,dash){
+    const a=(s,r)=>v.map(x=>x*s*r);
+    arrow(a(1,1.15),a(1,1.75),col,n1,alpha,dash);
+    arrow(a(-1,1.15),a(-1,1.75),col,n2,alpha,dash);
+  }
+  function box(c,h,col,lw,alpha,fill){
+    const [cx,cy,cz]=c,[hx,hy,hz]=h,V=[];
+    for(const sx of[-1,1])for(const sy of[-1,1])for(const sz of[-1,1])V.push([cx+sx*hx,cy+sy*hy,cz+sz*hz]);
+    if(fill){
+      ctx.save();ctx.globalAlpha=alpha*0.16;ctx.fillStyle=fill;
+      for(const f of[[0,1,3,2],[4,5,7,6],[0,1,5,4],[2,3,7,6],[0,2,6,4],[1,3,7,5]]){
+        ctx.beginPath();f.forEach((i,n)=>{const p=P(...V[i]);n?ctx.lineTo(...p):ctx.moveTo(...p);});ctx.closePath();ctx.fill();
+      }
+      ctx.restore();
+    }
+    for(let i=0;i<8;i++)for(const bit of[1,2,4]){const j=i^bit;if(j>i)seg(V[i],V[j],col,lw,alpha);}
+    return V;
+  }
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    th=-0.65+0.12*Math.sin(T*0.35);
+    const p=reduced?[3,3.3,3.3,6,7.2,7.4][b]:t;   // reduced motion: show each beat's finished picture
+    if(b<=2){
+      elv=0.42;
+      // b0: a dot draws a line; b1: the line sweeps a square; b2: the square sweeps a cube
+      const lx=b===0?E(p/2.2):1, hy=b===0?0:b===1?E(p/2.4):1, hz=b<2?0:E(p/2.4);
+      if(b===0){
+        seg([-1,0,0],[-1+2*lx,0,0],COL.ink,3);
+        const d=P(-1+2*lx,0,0);ctx.fillStyle=COL.ink;ctx.beginPath();ctx.arc(d[0],d[1],5,0,7);ctx.fill();
+      }else box([0,0,0],[1,hy,hz],COL.ink,2,1,COL.ink);
+      axisPair([1,0,0],COL.x,'East','West',b===0?C01((p-2)/0.6):1);
+      if(b>=1)axisPair([0,1,0],COL.y,'North','South',b===1?C01((p-2.2)/0.6):1);
+      if(b>=2)axisPair([0,0,1],COL.z,'Up','Down',C01((p-2.2)/0.6));
+    }else if(b===3){
+      elv=0.42;
+      // the cube slides kata, then sweeps ana, leaving a rainbow of copies: a tesseract
+      const back=E(p/1.1),sweep=E((p-1.3)/3.2),link=C01((p-4.4)/0.8);
+      const w=-back+2*sweep;
+      const fadeAx=0.35+0.65*(1-C01(p/1.2));
+      axisPair([1,0,0],COL.x,'East','West',fadeAx);axisPair([0,1,0],COL.y,'North','South',fadeAx);axisPair([0,0,1],COL.z,'Up','Down',fadeAx);
+      axisPair(A,COL.w,'Ana','Kata',C01((p-0.3)/0.7),[6,5]);
+      if(sweep>0)for(let s=-1;s<w-0.01;s+=0.25){box(add([0,0,0],s),[1,1,1],rainbow((s+1)/2),1.4,0.45);}
+      const V0=box(add([0,0,0],-1),[1,1,1],rainbow(0),1.2,link*0.6);
+      const col=sweep>0||back>0.5?rainbow((w+1)/2):COL.ink;
+      box(add([0,0,0],w),[1,1,1],col,2.4,1,col);
+      if(link>0)V0.forEach(v=>seg(v,add(v,2),COL.w,1.2,link*0.5));
+    }else if(b===5){
+      drawTitle(p);
+    }else{
+      // a flat sheet only ever sees the slice of the cube that passes through it
+      const look=E((p-4.2)/1.4);elv=0.42+look*(Math.PI/2-0.08-0.42);
+      const pass1=(p-0.3)/3.6,pass2=(p-5.8)/2.8;
+      const cz=pass1<1.05?-1.9+3.8*C01(pass1):1.9-3.8*C01(pass2);   // up through the sheet, then back down
+      const cubeA=1-look;
+      ctx.save();ctx.globalAlpha=0.9;
+      const sh=[[-1.7,-1.7,0],[1.7,-1.7,0],[1.7,1.7,0],[-1.7,1.7,0]].map(v=>P(...v));
+      ctx.fillStyle='rgba(201,140,233,0.10)';ctx.strokeStyle='rgba(201,140,233,0.55)';ctx.lineWidth=1.5;
+      ctx.beginPath();sh.forEach((q,n)=>n?ctx.lineTo(...q):ctx.moveTo(...q));ctx.closePath();ctx.fill();ctx.stroke();ctx.restore();
+      if(cubeA>0.02)box([0,0,cz],[0.65,0.65,0.65],COL.block,2,cubeA);
+      if(Math.abs(cz)<0.65){
+        const sq=[[-0.65,-0.65,0],[0.65,-0.65,0],[0.65,0.65,0],[-0.65,0.65,0]].map(v=>P(...v));
+        ctx.save();ctx.fillStyle=COL.block;ctx.globalAlpha=0.85;ctx.beginPath();sq.forEach((q,n)=>n?ctx.lineTo(...q):ctx.moveTo(...q));ctx.closePath();ctx.fill();ctx.restore();
+      }
+      if(p>DUR[4]-0.8){ctx.fillStyle=`rgba(13,17,21,${C01((p-(DUR[4]-0.8))/0.8)})`;ctx.fillRect(0,0,W,H);}
+    }
+    [...dotsEl.children].forEach((d,i)=>d.className=i===b?'on':i<b?'past':'');
+  }
+  // the title card: Your / Other / Right! (which turns the right way round), then the subtitle
+  // stretches outward through the fourth direction in the same colours as the tesseract
+  const SUB='A 4D sliding block puzzle game',TA=[0.3,1.0,1.7,2.9,4.0];
+  function word(txt,x,y,px,col,k,flip){
+    if(k<=0)return;
+    ctx.save();ctx.globalAlpha=E(k*1.4);ctx.translate(x,y+(1-E(k))*px*0.25);
+    if(flip){const c=Math.cos(Math.PI*(1-E(k)));ctx.scale(Math.abs(c)<0.001?0.001:c,1);}
+    ctx.font=`800 ${px}px "Bricolage Grotesque","Avenir Next",system-ui,sans-serif`;ctx.textAlign='center';ctx.textBaseline='alphabetic';
+    ctx.fillStyle=col;ctx.fillText(txt,0,0);ctx.restore();
+  }
+  function drawTitle(t){
+    const px=Math.min(W*0.24,H*0.13),gap=px*0.98,cx=W/2,top=H*0.38-gap;
+    word('Your',cx,top,px,COL.ink,(t-TA[0])/0.6);
+    word('Other',cx,top+gap,px,COL.ink,(t-TA[1])/0.6);
+    word('Right!',cx,top+gap*2,px,COL.w,(t-TA[2])/0.9,true);
+    const ANG=56*Math.PI/180,ux=Math.cos(ANG),uy=-Math.sin(ANG),N=3,STEP=1.3;
+    const fnt=v=>`600 ${v}px "IBM Plex Mono",ui-monospace,monospace`;
+    let sp=Math.min(W*0.045,22);ctx.font=fnt(sp);
+    const per=ctx.measureText(SUB).width/sp,half=N*STEP/Math.sin(ANG);
+    sp=Math.min(sp,W*0.92/(per+2*half*ux));ctx.font=fnt(sp);
+    const sy=top+gap*2+px*0.45+N*STEP*sp+sp,pos=s=>[cx+ux*half*sp*s,sy+uy*half*sp*s];
+    const k4=(t-TA[3])/0.7;
+    if(k4>0){
+      const st=E((t-TA[4])/1.6);
+      ctx.textAlign='center';ctx.textBaseline='alphabetic';
+      if(st>0)for(let n=N;n>=1;n--)for(const sg of[-1,1]){
+        const s=sg*n/N,[x,y]=pos(s*st);
+        ctx.fillStyle=rainbow((s+1)/2,(0.85-0.12*(n-1))*Math.min(1,st*3));ctx.fillText(SUB,x,y);
+      }
+      const [x,y]=pos(0);
+      ctx.save();ctx.globalAlpha=E(k4);ctx.fillStyle=COL.ink;ctx.fillText(SUB,x,y+(1-E(k4))*8);ctx.restore();
+    }
+  }
+  function frame(now){
+    if(!run)return;
+    const dt=Math.min(0.05,(now-last)/1000);last=now;T+=dt;
+    t+=dt;
+    if(t>=DUR[b]){if(b<DUR.length-1){b++;t=0;}else{close();return;}}
+    draw();requestAnimationFrame(frame);
+  }
+  function open(){
+    el.hidden=false;el.classList.remove('out');size();b=0;t=0;run=true;last=performance.now();requestAnimationFrame(frame);
+  }
+  function close(){
+    run=false;try{localStorage.setItem(KEY,'1');}catch(e){}
+    el.classList.add('out');setTimeout(()=>{el.hidden=true;el.classList.remove('out');},450);
+    dirty=true;
+  }
+  function next(){if(!run)return;if(b<DUR.length-1){b++;t=0;}else close();}
+  el.addEventListener('pointerdown',e=>{if(e.target.closest('#introSkip'))return;e.preventDefault();next();});
+  $('introSkip').addEventListener('click',close);
+  $('introReplay').addEventListener('click',open);
+  addEventListener('keydown',e=>{
+    if(el.hidden)return;
+    e.stopImmediatePropagation();e.preventDefault();
+    if(e.key==='Escape')close();else if([' ','Enter','ArrowRight'].includes(e.key))next();
+  },true);
+  addEventListener('resize',()=>{if(!el.hidden)size();});
+  let seen=false;try{seen=!!localStorage.getItem(KEY);}catch(e){}
+  if(!seen)open();
+})();
+
+// ---------- hints: glow the control you need, the first time you need it ----------
+const HINT_KEY='yor-hints';let HINTS={};try{HINTS=JSON.parse(localStorage.getItem(HINT_KEY)||'{}')||{};}catch(e){}
+let hintLayer=null;
+function hintDone(k){if(HINTS[k])return;HINTS[k]=1;try{localStorage.setItem(HINT_KEY,JSON.stringify(HINTS));}catch(e){}}
+function updHints(){
+  if(!ENG||!PS.s)return;
+  const WD=ENG.W*ENG.D,p=PS.s.p,k=Math.floor(p/WD)%ENG.L;
+  if(hintLayer!==null&&k!==hintLayer)hintDone('ana');
+  hintLayer=k;
+  if(axisOf(PS.F[3])!==3)hintDone('swap');
+  const four=ENG.L>1&&Object.keys(LEVELS).indexOf(levelKey)!==0;
+  document.querySelectorAll('[data-hold="e"],[data-hold="q"]').forEach(x=>x.classList.toggle('glow',four&&!HINTS.ana));
+  let near=false;
+  if(four&&!HINTS.swap&&axisOf(PS.F[3])===3){
+    const i=p%ENG.W,j=Math.floor(p/ENG.W)%ENG.D;
+    for(const q of PS.B){
+      const qk=Math.floor(q/WD)%ENG.L;
+      if(Math.abs(qk-k)!==1||Math.floor(q/ENG.WDL)!==Math.floor(p/ENG.WDL))continue;
+      if(Math.abs(q%ENG.W-i)<=1&&Math.abs(Math.floor(q/ENG.W)%ENG.D-j)<=1)near=true;
+    }
+  }
+  const phone=matchMedia('(max-width:780px)').matches;
+  $('tiltHint').hidden=!(near&&MO.on);
+  $('swapBtn').classList.toggle('glow',near&&!MO.on);
+  $('menuBtn').classList.toggle('glow',near&&!MO.on&&phone&&$('moMenu').hidden);
+}
 
 // ---------- boot ----------
 (function boot(){
